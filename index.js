@@ -1,6 +1,10 @@
 const Cognito = require('amazon-cognito-identity-js');
+const AWS = require('aws-sdk');
 
-const login = (username, password) => new Promise((resolve, reject) => {
+const login = (payload) => new Promise((resolve, reject) => {
+
+    const username = payload.username;
+    const password = payload.password;
 
     const authDetails = new Cognito.AuthenticationDetails({
         Username: username,
@@ -37,11 +41,58 @@ const login = (username, password) => new Promise((resolve, reject) => {
     });
 });
 
+const verify = (payload) => new Promise((resolve, reject) => {
+    //todo: move this logic to this package
+    const lambda = new AWS.Lambda({ region: process.env.awsRegion });
+
+    const params = {
+        FunctionName: 'decode-jwt',
+        Payload: JSON.stringify({
+            token: payload.accessToken
+        })
+    };
+
+    lambda.invoke(params, (err, _data) => {
+        if (!_data) {
+            reject('Failed to decode token');
+        } else if (_data.Payload === 'false') {
+            reject('invalid access token');
+        } else if (err) {
+            reject(err);
+        }
+
+        const data = JSON.parse(_data.Payload);
+
+        if (data.username === payload.username) {
+            resolve({
+                success: true
+            });
+        } else {
+            reject({
+                success: false,
+                message: 'JWT username does not match provided username'
+            });
+        }
+    });
+
+});
+
+const inputHandlers = {
+    authenticate: login,
+    verify
+};
+
 exports.handler = (event, context, callback) => {
 
-    login(event.username, event.password).then(loginData => {
-        callback(null, loginData);
-    })
+    if (inputHandlers[event.type]) {
+        inputHandlers[event.type](event).then(response => {
+            callback(null, response);
+        });
+    } else {
+        callback('not found');
+    }
 
 };
+
+
 
