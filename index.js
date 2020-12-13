@@ -5,6 +5,16 @@ const AWS = require('aws-sdk');
     ClientId: process.env.COGNITO_CLIENT_ID
 };
 
+const getUser = (username) => {
+    const userPool = new Cognito.CognitoUserPool(poolData);
+    const userData = {
+        Username: username,
+        Pool: userPool
+    };
+
+    return new Cognito.CognitoUser(userData);
+};
+
 const login = (payload) => new Promise((resolve, reject) => {
 
     const username = payload.username;
@@ -40,6 +50,50 @@ const login = (payload) => new Promise((resolve, reject) => {
     });
 });
 
+const refresh = (payload) => new Promise((resolve, reject) => {
+    const accessTokenVal = payload.accessToken;
+    const refreshTokenVal = payload.refreshToken;
+    const idTokenVal = payload.idToken;
+
+    const AccessToken = new Cognito.CognitoAccessToken({ AccessToken: accessTokenVal });
+    const RefreshToken = new Cognito.CognitoRefreshToken({ RefreshToken: refreshTokenVal });
+    const IdToken = new Cognito.CognitoIdToken({ IdToken: idTokenVal });
+
+    const sessionData = {
+        IdToken,
+        AccessToken,
+        RefreshToken
+    };
+
+    const cachedSession = new Cognito.CognitoUserSession(sessionData);
+
+    if (cachedSession.isValid()) {
+        resolve({
+            accessToken: cachedSession.getAccessToken().getJwtToken(),
+            idToken: cachedSession.getIdToken().getJwtToken(),
+            refreshToken: cachedSession.getRefreshToken().getToken()
+        });
+
+    } else {
+        const user = getUser(payload.username);
+        user.refreshSession(RefreshToken, (err, session) => {
+            if (err) {
+                console.log('couldnt refresh');
+                console.log(err);
+                reject({ 
+                    message: err
+                });
+            } else {
+                resolve({
+                    accessToken: session.getAccessToken().getJwtToken(),
+                    idToken: session.getIdToken().getJwtToken(),
+                    refreshToken: session.getRefreshToken().getToken()
+                });
+            }
+        });
+    }
+});
+
 const verify = (payload) => new Promise((resolve, reject) => {
     //todo: move this logic to this package
     const lambda = new AWS.Lambda({ region: process.env.awsRegion });
@@ -57,7 +111,10 @@ const verify = (payload) => new Promise((resolve, reject) => {
         } else if (_data.Payload === 'false') {
             reject('invalid access token');
         } else if (err) {
-            reject(err);
+            reject({
+                success: false,
+                message: err
+            });
         }
 
         const data = JSON.parse(_data.Payload);
@@ -146,6 +203,7 @@ const confirmUser = (payload) => new Promise((resolve, reject) => {
 
 const inputHandlers = {
     login,
+    refresh,
     verify,
     signUp,
     confirmUser
