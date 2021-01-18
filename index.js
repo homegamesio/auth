@@ -43,9 +43,7 @@ const login = (payload) => new Promise((resolve, reject) => {
             });
         },
         onFailure: (err) => {
-            reject({
-                error: err
-            });
+            reject(err);
         }
     });
 });
@@ -80,9 +78,7 @@ const refresh = (payload) => new Promise((resolve, reject) => {
             if (err) {
                 console.log('couldnt refresh');
                 console.log(err);
-                reject({ 
-                    message: err
-                });
+                reject(err);
             } else {
                 resolve({
                     accessToken: session.getAccessToken().getJwtToken(),
@@ -111,10 +107,7 @@ const verify = (payload) => new Promise((resolve, reject) => {
         } else if (_data.Payload === 'false') {
             reject('invalid access token');
         } else if (err) {
-            reject({
-                success: false,
-                message: err
-            });
+            reject(err);
         }
 
         const data = JSON.parse(_data.Payload);
@@ -124,10 +117,7 @@ const verify = (payload) => new Promise((resolve, reject) => {
                 success: true
             });
         } else {
-            reject({
-                success: false,
-                message: 'JWT username does not match provided username'
-            });
+            reject('JWT username does not match provided username');
         }
     });
 
@@ -214,6 +204,8 @@ exports.handler = (event, context, callback) => {
     if (inputHandlers[event.type]) {
         inputHandlers[event.type](event).then(response => {
             callback(null, response);
+        }).catch(err => {
+            callback(Error(err.message || err.toString()));
         });
     } else {
         callback('not found');
