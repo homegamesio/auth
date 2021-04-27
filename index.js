@@ -183,6 +183,7 @@ const confirmUser = (payload) => new Promise((resolve, reject) => {
         
         provider.confirmSignUp(params, (err, data) => {
             const success = !err;
+            console.log(error);
     
             resolve({
                 success
